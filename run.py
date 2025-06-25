@@ -70,7 +70,7 @@ def clean_str_cut(string, task):
 # Load word2vec model for text embeddings
 def load_word2vec_model(tweets_path):
     sentences = []
-    with open(tweets_path, 'r') as file:
+    with open(tweets_path, 'r', encoding='utf-8') as file:
         for line in file:
             _, content = line.strip().split('\t')
             # Preprocessing text using clean_str_cut
@@ -84,7 +84,7 @@ def load_word2vec_model(tweets_path):
 # Parse source tweet texts and get embeddings
 def get_node_features(tweets_path, word2vec):
     node_features = {}
-    with open(tweets_path, 'r') as file:
+    with open(tweets_path, 'r', encoding='utf-8') as file:
         for line in file:
             tweet_id, content = line.strip().split('\t')
             cleaned_content = clean_str_cut(content, task="twitter")
@@ -100,7 +100,7 @@ def get_node_features(tweets_path, word2vec):
 # Parse the tree file
 def parse_tree_file(file_path):
     G = nx.DiGraph()
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding='utf-8') as file:
         for line in file:
             parent, child = line.strip().split('->')
             parent_data, child_data = eval(parent.strip()), eval(child.strip())
@@ -169,7 +169,7 @@ def convert_to_pytorch_geometric(dataset):
 def add_numeric_labels_to_data(pyg_dataset, label_path):
     label_mapping = {'false': 0, 'true': 1, 'unverified': 2, 'non-rumor': 3}
     label_dict = {}
-    with open(label_path, 'r') as f:
+    with open(label_path, 'r', encoding='utf-8') as f:
         for line in f:
             label, tweet_id = line.strip().split(':')
             label_dict[tweet_id] = label_mapping[label]
@@ -381,10 +381,17 @@ def evaluate(model, data_loader, device):
 
 
 def main():
-    dataset_path = "/home/hwxu/Projects/Research/NPU/WSDM/Input/Twitter16"
+    dataset_path = "e:/desk/diffuse/diff_true/seqToSeq/code/D2-master/D2-master/data/twitter16"
     label_path = os.path.join(dataset_path, 'label.txt')
     tree_dir_path = os.path.join(dataset_path, 'tree')
     source_tweets_path = os.path.join(dataset_path, 'source_tweets.txt')
+    
+    # 检查文件是否存在
+    print(f"Checking files:")
+    print(f"Dataset path: {dataset_path}")
+    print(f"Source tweets exists: {os.path.exists(source_tweets_path)}")
+    print(f"Label file exists: {os.path.exists(label_path)}")
+    print(f"Tree directory exists: {os.path.exists(tree_dir_path)}")
 
     # Load word2vec model and parse tweets
     word2vec_model = load_word2vec_model(source_tweets_path)
@@ -408,7 +415,21 @@ def main():
 
     # Cross-validation setup
     kf = KFold(n_splits=K_FOLDS, shuffle=True, random_state=42)
-    device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
+    
+    # 更安全的设备设置
+    if torch.cuda.is_available():
+        print(f"CUDA available: {torch.cuda.is_available()}")
+        print(f"CUDA device count: {torch.cuda.device_count()}")
+        device = torch.device('cuda:0')  # 明确使用第一个GPU
+    else:
+        print("CUDA not available, using CPU")
+        device = torch.device('cpu')
+    
+    print(f"Using device: {device}")
+    
+    # 清理CUDA缓存
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
     # 初始化共享编码器
     shared_encoder = SharedEncoder(IN_CHANNELS, HIDDEN_CHANNELS)
@@ -418,8 +439,16 @@ def main():
     rumor_detect_model = RumorDetector(shared_encoder, OUT_CHANNELS)
 
     # 初始化端到端模型
-    model = EndToEndModel(shared_encoder, link_pred_model,
-                          rumor_detect_model).to(device)
+    try:
+        model = EndToEndModel(shared_encoder, link_pred_model,
+                              rumor_detect_model).to(device)
+        print("Model successfully moved to device")
+    except RuntimeError as e:
+        print(f"Error moving model to device: {e}")
+        print("Falling back to CPU")
+        device = torch.device('cpu')
+        model = EndToEndModel(shared_encoder, link_pred_model,
+                              rumor_detect_model).to(device)
 
     avg_acc, avg_f1 = 0, 0
     best_f1 = 0

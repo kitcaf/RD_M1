@@ -1,131 +1,65 @@
-# D$^2$: Customizing Two-Stage Graph Neural Networks for Early Rumor Detection through Cascade Diffusion Prediction
+# 任务：早期谣言信息检测
 
-## Abstract
+## 源数据集文件结构分析
 
-Early rumor detection is crucial for mitigating the widespread dissemination of misinformation. Existing methods predominantly rely on complete rumor diffusion graphs, which are challenging to obtain in real-world scenarios, complicating early detection efforts. To address this challenge, we propose **$D^2$**, a two-stage framework for early rumor **D**etection, integrating cascade **D**iffusion prediction. This framework aims to enhance early rumor detection by incorporating diffusion prediction capabilities. Specifically, a dynamic heterogeneous graph neural network (GNN) is developed to jointly model users' social and propagation graphs, enabling accurate prediction of potential diffusion paths using limited observed data within short time windows. The inferred diffusion paths are then integrated with early-stage data, and GNNs are employed for graph classification. However, the varying data distributions across different social media platforms necessitate extensive tuning to optimize GNN architectures. To facilitate the detection of rumor diffusion graphs at the initial stages, a search space is designed across four dimensions—*aggregation*, *merge*, *readout*, and *sequence* functions—encompassing various GNN architectures. Subsequently, D$^2$ employs an efficient differentiable search algorithm to identify high-performance GNNs within this search space. Experimental results on real social media datasets demonstrate that this approach significantly improves both the accuracy and robustness of early rumor detection.
+根据`run.py`的完整流程分析，真正的源数据集包含以下文件：
 
-## Project Structure
+### 📁 **核心数据文件**
 
-The project consists of several key components:
-
-- **data.py**: Defines the `CascadeDatasetProcessor` for loading, preprocessing, and splitting datasets.
-- **model.py**: Contains implementations of the `CascadePredictionModel` and `RumorDetectionModel`.
-- **train.py**: Training and evaluation scripts for model training, testing, and performance metrics calculation.
-- **config.yaml**: Configuration file to customize dataset paths, model parameters, and training settings.
-- **main.py**: Main script to execute the data processing, model initialization, training, and testing pipeline.
-
-## Installation
-
-To set up the environment for the pipeline:
-
-1. **Clone the repository**:
-
-   ```sh
-   git clone https://github.com/cgao-comp/D2.git
-   cd D2
-   ```
-
-2. **Create a virtual environment** (recommended):
-
-   ```sh
-   python3 -m venv D2
-   source D2/bin/activate
-   ```
-
-3. **Install dependencies**:
-
-   ```sh
-   pip install -r requirements.txt
-   ```
-
-## Usage
-
-To train and test the rumor detection pipeline, run the `main.py` script after configuring parameters in `config.yaml`.
-
-```sh
-python main.py
+#### **文件1: 推文内容文件 (`source_tweets.txt`)**
+```
+格式: TSV (Tab分隔)
+结构: tweet_id	content
+功能: 存储推文ID和对应的文本内容
+示例:
+12345	This is the original tweet content about some news
+67890	RT @user: Another tweet content here
 ```
 
-### Parameters
-
-Customize the pipeline by adjusting `config.yaml`. Key parameters include:
-
-- **Dataset paths**: Specify paths to your dataset and labels.
-- **Batch size** and **learning rate** for training.
-- **GNN type**: Choose between GCN, GAT, or SAGE layers.
-- **Model hyperparameters**: Adjust `in_channels`, `hidden_channels`, and number of classes.
-  
-## Model Architecture
-
-The pipeline comprises two main components:
-
-1. **Cascade Prediction Model**: Predicts embeddings for missing nodes in partial cascades using a configurable GNN model (e.g., GCN).
-2. **Rumor Detection Model**: Detects rumors using the cascade structure, with a fusion layer for feature interaction and options for **mean** or **max** pooling.
-
-Both models are configurable via `config.yaml` to allow flexibility in architectural choices.
-
-## Datasets
-
-This project supports loading and processing datasets with cascade structures and rumor labels. Use `CascadeDatasetProcessor` to prepare data for model input. Datasets should include:
-
-- **Cascade information**: Nodes and edges representing user interactions.
-- **Label information**: Binary or multi-class labels indicating rumor or non-rumor cascades.
-
-### Preprocessing
-
-The `data.py` script preprocesses data, splits it into training and testing sets, and serializes it for reuse.
-
-## Evaluation
-
-The pipeline is evaluated using common metrics for rumor detection:
-
-- **Accuracy**, **Precision**, **Recall**, and **F1-score** are calculated to assess performance on test sets.
-
-## Results
-
-Using the pipeline on social network datasets, the models achieve robust performance, demonstrating improvements in rumor detection accuracy and generalization.
-
-## Configuration Example (config.yaml)
-
-```yaml
-data:
-  cascade_file_path: "/path/to/cascade_data.txt"
-  label_file_path: "/path/to/label_data.txt"
-  max_nodes: 32
-  output_dir: "/path/to/output_dir"
-  batch_size: 32
-  train_split: 0.6
-
-model:
-  in_channels: 1
-  hidden_channels: 128
-  num_classes: 4
-  gnn_type: "GCN"
-
-training:
-  learning_rate: 0.001
-  epochs: 10
-  alpha: 0.5
-  optimizer: "Adam"
+#### **文件2: 传播树目录 (`tree/`)**
+```
+格式: 多个.txt文件，每个文件代表一个传播级联
+结构: parent_node -> child_node (使用eval解析的元组格式)
+功能: 描述信息传播的树状结构和时间序列
+示例: (tweet_id, user_id, timestamp) -> (child_tweet_id, child_user_id, child_timestamp)
 ```
 
-## Acknowledgments
-
-This work is based on sociological theories of social influence and advanced graph neural network methodologies. We acknowledge the works that inspired this model, including **RvNN** ([GitHub Repository](https://github.com/majingCUHK/Rumor_RvNN)) and **SANE** ([GitHub Repository](https://github.com/LARS-research/SANE)).
-
-## License
-
-This project is licensed under the MIT License.
-
-## Citation
-
-If you use this pipeline in your research, please cite our project as follows:
-
-```bibtex
-@article{rumordetection2025,
-  title={D$^2$: Customizing Two-Stage Graph Neural Networks for Early Rumor Detection through Cascade Diffusion Prediction},
-  author={Haowei Xu, Chao Gao, Xianghua Li, Zhen Wang},
-  journal={The 18th ACM International Conference on Web Search and Data Mining},
-  year={2025}
-}
+#### **文件3: 标签文件 (`label.txt`)**
 ```
+格式: 文本文件
+结构: 每行包含一个传播级联的标签信息
+功能: 标识每个传播级联是否为谣言
+标签类型: 'false', 'true', 'unverified', 'non-rumor'
+```
+
+### 🔄 **预处理数据文件 (preprocess.py使用)**
+
+#### **文件4-6: 分割数据集文件**
+```
+twitter16.train - 训练集: tweet_id	content	label
+twitter16.dev   - 开发集: tweet_id	content	label  
+twitter16.test  - 测试集: tweet_id	content	label
+```
+
+#### **文件7: 用户关系图 (`twitter16_graph.txt`)**
+```
+格式: 空格分隔
+结构: user_id dst_user1:weight1 dst_user2:weight2 ...
+功能: 描述用户之间的社交关系
+```
+
+### 📊 **数据处理流程对比**
+
+| 处理方式 | 使用文件 | 特征提取 | 图构建方式 |
+|---------|----------|----------|-----------|
+| **run.py流程** | `source_tweets.txt` + `tree/` + `label.txt` | Word2Vec词向量 | 传播树结构 |
+| **data.py流程** | `data.TD_RvNN.vol_5000.txt` + `Twitter16_label_all.txt` | 仅文本长度 | 父子推文关系 |  
+| **preprocess.py流程** | `.train/.dev/.test` + `_graph.txt` | Word2Vec词向量 | 用户社交关系 |
+
+### 💡 **关键发现**
+
+1. **run.py是完整实现**: 包含Word2Vec文本处理 + 传播树分析
+2. **data.py是简化版本**: 只使用文本长度特征，缺少语义信息  
+3. **preprocess.py是传统方法**: 基于用户关系图的经典社交网络分析
+
+**结论**: `run.py`中的数据集结构是最完整的，同时利用了**文本语义**和**传播结构**信息。
