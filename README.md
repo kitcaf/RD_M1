@@ -1,5 +1,54 @@
 # 任务：早期谣言信息检测
 
+## 当前模型结构
+
+联合训练的端到端模型，不是独立训练的。整个系统通过**共享编码器**将两个任务连接起来。
+
+CascadePredictor：时序链接预测器
+
+- 任务：预测早期级联中"哪些边会在未来出现"
+- 输入：早期级联图（前75%的传播）
+- 输出：预测后续25%时间段内可能出现的链接
+- 技术：使用多头注意力机制计算节点对之间的链接概率
+
+RumorDetector：基于重构图的谣言分类器
+
+- 任务：基于"原始早期图 + 预测链接"进行谣言分类
+- 输入：重构后的完整传播图
+- 输出：谣言类别（false/true/unverified/non-rumor）
+- 技术：图池化 + 全局特征聚合 + 分类
+
+## 当前模型测试结果：
+
+- 平均准确率: 0.3765
+- 平均F1分数: 0.3083
+
+
+## 当前结构问题：CascadePredictor是最有创新潜力的组件
+
+- 简单的边预测：只是基于注意力机制预测边的存在概率
+- 缺乏传播动力学：没有考虑信息传播的时序模式和用户行为
+- 静态特征：只使用Word2Vec，忽略了动态传播特征
+
+#### 改进方向：
+
+> 能不能**生成更realistic的传播路径**
+
+- 图扩散模型 (Graph Diffusion)
+- 考虑时序依赖和传播模式
+
+（1）基于扩散的级联预测
+> 将传播建模为扩散过程
+可能：Graph Diffusion Models, Score-based Generative Models
+
+（2）基于VAE的图生成
+> 学习传播图的潜在表示和生成规律
+可能：Graph VAE, Conditional Graph Generation
+
+（3）基于流模型的级联扩展
+> 学习从早期到完整级联的可逆变换
+可能：Graph Normalizing Flows
+
 ## 源数据集文件结构分析
 
 根据`run.py`的完整流程分析，真正的源数据集包含以下文件：
@@ -56,7 +105,7 @@ twitter16.test  - 测试集: tweet_id	content	label
 | **data.py流程** | `data.TD_RvNN.vol_5000.txt` + `Twitter16_label_all.txt` | 仅文本长度 | 父子推文关系 |  
 | **preprocess.py流程** | `.train/.dev/.test` + `_graph.txt` | Word2Vec词向量 | 用户社交关系 |
 
-### 💡 **关键发现**
+### 💡 **核心结论**
 
 1. **run.py是完整实现**: 包含Word2Vec文本处理 + 传播树分析
 2. **data.py是简化版本**: 只使用文本长度特征，缺少语义信息  

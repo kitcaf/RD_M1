@@ -263,7 +263,7 @@ def create_models(in_channels, hidden_channels, out_channels):
     # 初始化共享编码器
     shared_encoder = SharedEncoder(in_channels, hidden_channels)
 
-    # 初始化链接预测模型和谣言检测模型
+    # 初始化链接预测模型和谣言检测模型 --- 
     link_pred_model = CascadePredictor(shared_encoder)
     rumor_detect_model = RumorDetector(shared_encoder, out_channels)
 
