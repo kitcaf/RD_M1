@@ -2,7 +2,21 @@
 
 ## 当前模型结构
 
+
+
 联合训练的端到端模型，不是独立训练的。整个系统通过**共享编码器**将两个任务连接起来。
+
+```
+输入数据 → SharedEncoder → ┌→ CascadePredictor (链接预测)
+                          └→ RumorDetector (谣言分类)
+```
+
+SharedEncoder：学习共享特征
+- 统一特征编码: 将原始节点特征（Word2Vec + 度数特征）编码成高维表示
+- 图结构学习: 通过GraphSAGE学习节点在传播图中的结构化表示
+- 特征共享: 为CascadePredictor和RumorDetector提供统一的节点嵌入
+- 信息聚合: 聚合邻居节点信息，捕获传播模式
+
 
 CascadePredictor：时序链接预测器
 
@@ -17,6 +31,8 @@ RumorDetector：基于重构图的谣言分类器
 - 输入：重构后的完整传播图
 - 输出：谣言类别（false/true/unverified/non-rumor）
 - 技术：图池化 + 全局特征聚合 + 分类
+
+
 
 ## 当前模型测试结果：
 跑完的结果如下：

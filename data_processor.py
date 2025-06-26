@@ -58,7 +58,6 @@ def load_word2vec_model(tweets_path):
     
     参数:
         tweets_path (str): 推文文件路径
-        
     返回:
         Word2Vec: 训练好的Word2Vec模型
     """
@@ -72,7 +71,7 @@ def load_word2vec_model(tweets_path):
             cleaned_content = clean_str_cut(content, task="twitter")
             sentences.append(cleaned_content)
     
-    # 训练Word2Vec模型
+    # 训练Word2Vec模型  训练Word2Vec：300维向量，窗口大小5，最小词频1
     word2vec = Word2Vec(sentences, vector_size=VECTOR_SIZE,
                         window=WINDOW_SIZE, min_count=MIN_COUNT, workers=WORKERS)
     return word2vec
@@ -94,16 +93,18 @@ def get_node_features(tweets_path, word2vec):
     with open(tweets_path, 'r', encoding='utf-8') as file:
         for line in file:
             tweet_id, content = line.strip().split('\t')
+            # 清除无效词汇
             cleaned_content = clean_str_cut(content, task="twitter")
             
-            # 通过平均词嵌入获取推文嵌入
+            # 通过平均词嵌入获取推文嵌入（300维）
             tweet_embedding = np.mean(
                 [word2vec.wv[word] for word in cleaned_content if word in word2vec.wv], axis=0)
             
-            # 处理NaN值，使用零向量
+            # 处理NaN值，使用零向量（空推文的情况）
             if np.isnan(tweet_embedding).any():
                 tweet_embedding = np.zeros(VECTOR_SIZE)
             
+            # 每一个存储推文ID->向量映射
             node_features[tweet_id] = tweet_embedding
     
     return node_features
@@ -125,8 +126,12 @@ def parse_tree_file(file_path):
         for line in file:
             parent, child = line.strip().split('->')
             parent_data, child_data = eval(parent.strip()), eval(child.strip())
+            # TODO 没有理解这里做什么
+            # 加入节点[用户id, 推文id, 时间戳]
             G.add_node(tuple(parent_data))
+            # 加入节点[用户id, 推文id, 时间戳]
             G.add_node(tuple(child_data))
+            # 加入节点之间的连边
             G.add_edge(tuple(parent_data), tuple(child_data))
     
     return G
@@ -170,6 +175,7 @@ def process_for_temporal_link_prediction(cascade_data, node_features):
     
     参数:
         cascade_data (dict): 级联数据字典
+       {"initial_graph": early_graph:nx.DiGraph, "prediction_graph": prediction_graph:nx.DiGraph}
         node_features (dict): 节点特征字典
         
     返回:
@@ -180,11 +186,11 @@ def process_for_temporal_link_prediction(cascade_data, node_features):
     for tree_id, data in cascade_data.items():
         initial_graph, prediction_graph = data["initial_graph"], data["prediction_graph"]
         
-        # 获取所有节点
+        # 获取所有节点 1. 创建节点映射（字符串ID -> 数字索引）
         all_nodes = set(initial_graph.nodes).union(set(prediction_graph.nodes))
         node_mapping = {node: i for i, node in enumerate(all_nodes)}
         
-        # 使用Word2Vec特征作为节点特征
+        # 使用Word2Vec特征作为节点特征 构建节点特征矩阵
         node_features_matrix = np.array([
             node_features.get(str(node[0]), np.zeros(VECTOR_SIZE)) 
             for node in all_nodes
@@ -240,12 +246,13 @@ def convert_to_pytorch_geometric(dataset):
         
         # 创建PyG数据对象
         pyg_data = Data(
-            x=node_features, 
-            edge_index=initial_edges,
-            pred_edge_index=prediction_edges, 
-            tweet_id=tree_id
+            x=node_features,  # 节点特征[N, 300]
+            edge_index=initial_edges, # 早期边索引[2, E1]
+            pred_edge_index=prediction_edges,  # 待预测边索引[2, E2]
+            tweet_id=tree_id # 推文ID（后续会删除）
         )
-        
+
+        # 应用图变换：无向化+自环+度数特征
         pyg_dataset.append(transform(pyg_data))
     
     return pyg_dataset
@@ -297,10 +304,13 @@ def load_and_process_data(dataset_path):
         
     返回:
         list: 处理好的PyTorch Geometric数据集
+    
     """
-    # 构建文件路径
+    # 构建文件路径-标签文件
     label_path = os.path.join(dataset_path, 'label.txt')
+    # 传播树文件
     tree_dir_path = os.path.join(dataset_path, 'tree')
+    # 推文（推文id, 推文内容）数据
     source_tweets_path = os.path.join(dataset_path, 'source_tweets.txt')
     
     # 检查文件是否存在
@@ -312,19 +322,31 @@ def load_and_process_data(dataset_path):
     
     # 加载Word2Vec模型并解析推文
     print("正在训练Word2Vec模型...")
+    # 训练word2vecmodel
     word2vec_model = load_word2vec_model(source_tweets_path)
+    # 节点特征提取，通过训练好的word2vecmodel模型对推文形成推文内容嵌入向量
     node_features = get_node_features(source_tweets_path, word2vec_model)
     
     # 处理所有传播树文件
     print("正在处理传播树文件...")
+    # 传播树解析
     tree_files = glob.glob(os.path.join(tree_dir_path, "*.txt"))
     graphs = {
         os.path.basename(file).replace(".txt", ""): parse_tree_file(file) 
         for file in tree_files
     }
+
+    """
+        graphs是一个传播图对象：记录每一个推文节点产生的推文传播图
+        graphs：{
+            推文id: DiGraph对象（论文中将DiGraph对象描述为推文id的级联）
+            ...
+        }
+    """
     
     # 处理级联并按百分比分割
     print("正在分割级联数据...")
+
     processed_cascades = {
         tree_id: split_cascade_by_percentage(graph) 
         for tree_id, graph in graphs.items()

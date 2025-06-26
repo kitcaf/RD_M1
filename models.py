@@ -15,6 +15,7 @@ class SharedEncoder(torch.nn.Module):
     """
     共享编码器
     使用GraphSAGE进行图神经网络编码，包含批归一化、Dropout和跳跃连接
+    GraphSAGE是一种流行的GNN架构，这里也可以替换成GCN、GAT或其他GNN架构
     """
     
     def __init__(self, in_channels, hidden_channels):
