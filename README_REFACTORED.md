@@ -63,7 +63,7 @@ D2-master/
   - `safe_model_to_device()`: 安全的模型设备转移
   - `print_model_info()`: 模型信息打印
 
-### 6. main_refactored.py - 主程序
+### 6. main.py - 主程序
 - **功能**: 协调所有模块，执行完整流程
 - **流程**:
   1. 数据加载和处理
@@ -76,16 +76,8 @@ D2-master/
 
 ### 运行重构版本
 ```bash
-python main_refactored.py
+python main.py
 ```
 
 
-## 🔄 迁移指南
-
-如果要从原始版本迁移到重构版本：
-
-1. **数据**: 无需改动，使用相同的数据格式
-2. **配置**: 在 `config.py` 中调整参数
-3. **自定义**: 在对应模块中添加新功能
-4. **运行**: 使用 `main_refactored.py` 替代 `run.py`
 
