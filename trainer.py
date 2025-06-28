@@ -40,20 +40,20 @@ def train_epoch(model, data_loader, optimizer, scheduler, device):
         data = data.to(device)
         optimizer.zero_grad()
 
-        # 生成负样本用于链接预测
+        # 生成负样本用于链接预测（随机生成的边）
         neg_edge_index = custom_negative_sampling(
             edge_index=data.edge_index,
             num_nodes=data.num_nodes,
             num_neg_samples=data.pred_edge_index.shape[1]
         ).to(device)
         
-        # 创建边标签（正样本为1，负样本为0）
+        # 创建边标签（正样本-真实的未来预测边为1，负样本为0）
         edge_labels = torch.cat([
             torch.ones(data.pred_edge_index.shape[1]), 
             torch.zeros(neg_edge_index.shape[1])
         ]).to(device)
         
-        # 合并正负样本边
+        # 合并正负样本边 合并正负样本作为候选边集合
         data.pred_edge_index = torch.cat([data.pred_edge_index, neg_edge_index], dim=1)
         data.edge_index = data.edge_index.long()
         data.pred_edge_index = data.pred_edge_index.long()
@@ -120,7 +120,7 @@ def evaluate_model(model, data_loader, device):
         for data in data_loader:
             data = data.to(device)
 
-            # 为评估生成负样本
+            # 为评估生成负样本  应该是根据所有节点生成所有可能的候选边 n * n
             neg_edge_index = custom_negative_sampling(
                 edge_index=data.edge_index,
                 num_nodes=data.num_nodes,

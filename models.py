@@ -2,6 +2,15 @@
 """
 模型定义模块
 包含共享编码器、级联预测器、谣言检测器和端到端模型
+
+就3个模型 + 一个共享编码器
+
+SharedEncoder、
+CascadePredictor、
+RumorDetector、
+EndToEndModel
+
+
 """
 
 import torch
@@ -73,8 +82,15 @@ class SharedEncoder(torch.nn.Module):
 
 class CascadePredictor(torch.nn.Module):
     """
-    级联预测器
+    级联预测器（预测未来的传播情况 --- 基于有限观察预测未来发展）
     用于预测级联中的链接，使用共享编码器和多头注意力机制
+
+    注意：是边分类器(Link Classifier)，不是图生成器。基于二分类的监督学习
+    
+    输入：早期图数据，监督数据-候选数据（正样本-未来的边、负样本-随机的边）
+
+    输出：候选数据的所有边的概率
+
     """
     
     def __init__(self, shared_encoder):
@@ -96,7 +112,7 @@ class CascadePredictor(torch.nn.Module):
 
     def encode(self, x, edge_index):
         """
-        编码节点特征
+        基于早期图(edge_index)编码节点特征
         
         参数:
             x (Tensor): 节点特征
@@ -105,6 +121,7 @@ class CascadePredictor(torch.nn.Module):
         返回:
             Tensor: 编码后的节点嵌入
         """
+        # 基于早期图使用GraphSAGE进行编码
         return self.shared_encoder(x, edge_index)
 
     def decode(self, z, edge_index):
@@ -124,13 +141,11 @@ class CascadePredictor(torch.nn.Module):
         z_src = z[src].unsqueeze(1)  # shape (num_edges, 1, hidden_channels)
         z_dst = z[dst].unsqueeze(1)  # shape (num_edges, 1, hidden_channels)
         
-        # 组合源节点和目标节点嵌入
+        # 组合源节点和目标节点嵌入 # 通过多头注意力机制融合源节点和目标节点特征
         z_combined = torch.cat([z_src, z_dst], dim=1)  # shape (num_edges, 2, hidden_channels)
-        
-        # 应用多头注意力
         attn_output, _ = self.attention(z_combined, z_combined, z_combined)
         
-        # 返回链接概率
+        # 输出sigmoid概率，表示该边存在的可能性
         return torch.sigmoid(attn_output[:, 0, :].sum(dim=-1))
 
     def forward(self, x, edge_index, edge_index_pred):
@@ -145,8 +160,11 @@ class CascadePredictor(torch.nn.Module):
         返回:
             Tensor: 预测链接的概率
         """
-        z = self.encode(x, edge_index)
-        return self.decode(z, edge_index_pred)
+        # 1. 基于早期图(edge_index)编码节点特征
+        z = self.encode(x, edge_index) # 使用SharedEncoder处理early_graph
+
+        # 2. 对候选边集合(edge_index_pred)进行预测
+        return self.decode(z, edge_index_pred)  # 输出每条候选边的存在概率
 
 
 class RumorDetector(torch.nn.Module):
@@ -229,19 +247,19 @@ class EndToEndModel(torch.nn.Module):
         返回:
             tuple: (谣言检测输出, 链接预测输出)
         """
-        # 链接预测任务
+        # 链接预测任务（输出所有候选边的概率）
         pred_edges = self.link_pred_model(
             data.x, data.edge_index, data.pred_edge_index
         )
 
-        # 从链接预测的注意力层输出构建推断图
-        # 只保留预测概率大于0.5的边
+        # 只保留预测概率大于0.5的边 基于概率阈值(0.5)筛选边，
+        # 早期数据 + 预测边 == 构建重构图
         reconstructed_edge_index = torch.cat([
             data.edge_index, 
             data.pred_edge_index[:, pred_edges > 0.5]
         ], dim=1)
 
-        # 使用谣言检测模型进行分类
+        # 将重构图传给 RumorDetector，进行谣言预测
         rumor_out = self.rumor_detect_model(
             data.x, reconstructed_edge_index, data.batch
         )

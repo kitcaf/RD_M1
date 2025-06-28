@@ -140,7 +140,9 @@ def parse_tree_file(file_path):
 def split_cascade_by_percentage(graph, percentage=PERCENTAGE):
     """
     按时间百分比分割级联，生成早期序列和预测序列
-    
+    PERCENTAGE：75%
+
+
     参数:
         graph (nx.DiGraph): 传播图
         percentage (float): 分割百分比，默认使用配置中的值
@@ -158,7 +160,7 @@ def split_cascade_by_percentage(graph, percentage=PERCENTAGE):
     max_time = max(t for _, _, t in edges_with_times)
     time_threshold = max_time * percentage
     
-    # 分离早期边和预测边
+    # 分离早期边和预测边 前%75 和后25%时间的传播边 
     early_edges = [(u, v) for u, v, t in edges_with_times if t <= time_threshold]
     prediction_edges = [(u, v) for u, v, t in edges_with_times if t > time_threshold]
     
