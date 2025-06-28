@@ -4,10 +4,28 @@
 
 联合训练的端到端模型，不是独立训练的。整个系统通过**共享编码器**将两个任务连接起来。
 
+其实没有怎么**高大上**：
+
+- CascadePredictor / RumorDetector都得到损失，然后在最后通过不同的权重进行得到总的损失 --- 简单的简单的线性加权组合
+
+- SharedEncoder本质就是一个图编码器，而CascadePredictor在训练的节点需要对早期图进行图编码，RumorDetector又需要对重构图进行图编码。那么未来两个任务共享同一套图编码参数，就来了个SharedEncoder，就是GraphSAGE网络在两个下游任务分别调用它，通过反向传播自然实现参数共享
+
 ```
-输入数据 → SharedEncoder → ┌→ CascadePredictor (链接预测)
-                          └→ RumorDetector (谣言分类)
+数据流向：
+┌─────────────┐    ┌─────────────────┐    ┌──────────────────┐
+│   原始数据   │───▶│  SharedEncoder  │───▶│    两个分支      │
+│ x,edge_index│    │ (2层GraphSAGE)  │    │ ┌─CascadePredictor│
+└─────────────┘    └─────────────────┘    │ └─RumorDetector   │
+                                          └──────────────────┘
+                                                    │
+损失计算：                                          ▼
+link_loss ◄─── CascadePredictor                ┌─────────────┐
+rumor_loss ◄── RumorDetector                   │ 联合损失     │
+                  │                           │loss = 0.4*L1│
+                  └────────────────────────────│   + 0.6*L2  │
+                                              └─────────────┘
 ```
+
 
 SharedEncoder：学习共享特征
 - 统一特征编码: 将原始节点特征（Word2Vec + 度数特征）编码成高维表示
